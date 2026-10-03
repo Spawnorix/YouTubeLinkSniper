@@ -2,14 +2,16 @@ console.log("[SNIPER - BG] loaded");
 
 const seen = new Map();
 
-/* LOGGER */
+// Logger
 function logLink(url) {
 
     const now = Date.now();
 
+    // Prevent duplications
     if (seen.get(url) && now - seen.get(url) < 1500) return;
     seen.set(url, now);
 
+    // Store
     chrome.storage.local.get(["recentLinks"], (data) => {
 
         const recentLinks = data.recentLinks || [];
@@ -21,17 +23,16 @@ function logLink(url) {
             time: now
         });
 
-        if (recentLinks.length > 20) recentLinks.pop();
-
         chrome.storage.local.set({ recentLinks });
     });
 }
 
-/* RESOLVER */
+// Resolver
 async function resolveShareLink(shareUrl) {
 
     try {
 
+        // Redirect chain
         const res = await fetch(shareUrl, {
             redirect: "follow",
             credentials: "include"
@@ -44,7 +45,7 @@ async function resolveShareLink(shareUrl) {
     }
 }
 
-/* TAB TRACKER */
+// Tab Tracker
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
     if (changeInfo.status !== "complete") return;
@@ -52,6 +53,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
     const url = tab.url;
 
+     // Validate resolved link before logging
     if (url.includes("roblox.com/share-links")) {
 
         const finalUrl = await resolveShareLink(url);

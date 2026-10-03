@@ -1,9 +1,39 @@
-console.log("[SNIPER] Sniper loaded");
+﻿console.log("[SNIPER] Sniper loaded");
+
+// Constants & State
+let enabled = false;
+let observer = null;
+let isLivePage = false;
+let cooldown = false;
+let watchdogStarted = false;
+let lastHitTime = null;
+let openSound = null;
+
+const processedLinks = new Map();
+const processedUsers = new Map();
+
+const DUPLICATE_TIMEOUT = 1e9;
+const LINK_LOCK_MS = 1000;
+
+let globalStreamer = "@stream";
+
+// Settings
+let settings = {
+    sound: true,
+    ignoreSameUser: false,
+    autoStop: false,
+    autoCopy: true,
+    bypassCooldown: false,
+    streamerOnly: false
+};
+
+// Startup
+const firedLinks = new Map();
 
 chrome.storage.local.get(["settings"], (data) => {
-
     if (!data.settings) {
         chrome.storage.local.set({
+            // Default
             settings: {
                 sound: true,
                 ignoreSameUser: false,
@@ -18,35 +48,7 @@ chrome.storage.local.get(["settings"], (data) => {
 });
 
 chrome.storage.local.set({ enabled: false });
-
-let enabled = false;
-let observer = null;
-let isLivePage = false;
-let cooldown = false;
-let watchdogStarted = false;
-let lastHitTime = null;
-
-const processedLinks = new Map();
-const processedUsers = new Map();
-const DUPLICATE_TIMEOUT = 1e9;
-
-const firedLinks = new Map();
-const LINK_LOCK_MS = 1000;
-
-let globalStreamer = "@stream";
-
 chrome.runtime.sendMessage({ type: "test" });
-
-/* SETTINGS */
-let settings = {
-    sound: true,
-    ignoreSameUser: false,
-    autoStop: false,
-    autoCopy: true,
-    maxLinks: 10,
-    bypassCooldown: false,
-    streamerOnly: false
-};
 
 chrome.storage.local.get(["settings"], (data) => {
     settings = Object.assign(settings, data.settings || {});
@@ -62,23 +64,59 @@ chrome.storage.onChanged.addListener((changes) => {
     }
 });
 
-/* SOUND */
-let openSound = new Audio();
-openSound.volume = 0.6;
-
-function updateSound(file) {
-    if (!file) return;
-
-    openSound = new Audio(chrome.runtime.getURL(file));
-    openSound.volume = 0.6;
-}
-
-/* LOAD STATE */
 chrome.storage.local.get(["enabled"], (data) => {
     enabled = !!data.enabled;
 });
 
-/* CLEAN OLD DUPLICATES */
+// Functions
+// Sound
+function updateSound(file) {
+
+    if (!file) return;
+
+    try {
+
+        const soundUrl = chrome.runtime.getURL(file);
+
+        openSound = new Audio(soundUrl);
+
+        openSound.preload = "auto";
+        openSound.volume = 0.6;
+
+        openSound.load();
+
+        console.log("[SOUND] Loaded:", soundUrl);
+
+    } catch (e) {
+        console.log("[SOUND] Load error:", e);
+    }
+}
+
+async function playOpenSound() {
+
+    if (!settings.sound) return;
+    if (!openSound) return;
+
+    try {
+
+        openSound.pause();
+
+        openSound.currentTime = 0;
+
+        const cloned = openSound.cloneNode();
+
+        cloned.volume = 0.6;
+
+        await cloned.play();
+
+        console.log("[SOUND] Played");
+
+    } catch (e) {
+        console.log("[SOUND] Play failed:", e);
+    }
+}
+
+// Cleanup
 function cleanProcessed() {
 
     const now = Date.now();
@@ -90,7 +128,7 @@ function cleanProcessed() {
     }
 }
 
-/* STOP ON REFRESH */
+// Stop on refresh
 window.addEventListener("beforeunload", () => {
     chrome.storage.local.set({ enabled: false });
     enabled = false;
@@ -101,7 +139,7 @@ window.addEventListener("beforeunload", () => {
     }
 });
 
-/* COOLDOWN */
+// Cooldown
 function startCooldown() {
 
     if (settings.bypassCooldown) return;
@@ -118,7 +156,7 @@ function startCooldown() {
     }, 10000);
 }
 
-/* WATCHDOG */
+// Watchdog
 function watchChatReconnect() {
 
     if (watchdogStarted) return;
@@ -134,6 +172,7 @@ function watchChatReconnect() {
         const doc = iframe.contentDocument || iframe.contentWindow.document;
         const chat = doc.querySelector("#items");
 
+        // Reattach observer if chat disappears
         if (!chat) {
             console.log("[SNIPER] chat lost — retrying...");
             waitForChat();
@@ -142,13 +181,14 @@ function watchChatReconnect() {
     }, 5000);
 }
 
-/* OPEN LINK */
+// Link Opening
 const ZERO_WIDTH = /[\u200B-\u200D\uFEFF]/g;
 
-function openLink(url, reactionTime) {
+function openLink(url, detectTime) {
 
     try {
 
+        // Clean URL
         const cleanUrl = String(url || "")
             .replace(/[\u200B-\u200D\uFEFF]/g, "")
             .trim();
@@ -157,6 +197,7 @@ function openLink(url, reactionTime) {
 
         console.log("[SNIPER] OPENING:", cleanUrl);
 
+        // Open link in new tab
         const win = window.open(cleanUrl, "_blank");
 
         if (!win) {
@@ -164,10 +205,11 @@ function openLink(url, reactionTime) {
             location.href = cleanUrl;
         }
 
-        if (reactionTime) {
+        // Log open delay
+        if (detectTime) {
             console.log(
                 "[SNIPER] open delay:",
-                reactionTime,
+                Math.round(performance.now() - detectTime),
                 "ms"
             );
         }
@@ -177,6 +219,7 @@ function openLink(url, reactionTime) {
     }
 }
 
+// Link Detection
 async function scanNode(node) {
     try {
         if (!node || node.nodeType !== 1) return;
@@ -184,6 +227,7 @@ async function scanNode(node) {
         const matches = [];
         const now = Date.now();
 
+        // Extract Roblox links from anchors
         const anchors = node.querySelectorAll?.("a[href]") || [];
 
         for (const a of anchors) {
@@ -192,6 +236,7 @@ async function scanNode(node) {
             let href = a.href || "";
             if (!href) continue;
 
+            // Resolve YouTube redirect URLs
             if (href.includes("youtube.com/redirect")) {
                 try {
                     const url = new URL(href);
@@ -207,6 +252,7 @@ async function scanNode(node) {
             } catch {}
 
             if (
+                // Match Roblox server links
                 href.includes("roblox.com/share") &&
                 href.includes("&type=Server") &&
                 !href.includes("...")
@@ -215,6 +261,7 @@ async function scanNode(node) {
             }
         }
 
+        // Check if the node itself is a link
         if (node.matches?.("a[href]")) {
             let href = node.href || "";
 
@@ -235,6 +282,7 @@ async function scanNode(node) {
             }
         }
 
+        // Extract plain Roblox links
         const text = (node.innerText || "").replace(/[\u200B-\u200D\uFEFF]/g, "");
 
         const regex = text.match(
@@ -243,9 +291,7 @@ async function scanNode(node) {
 
         if (regex) {
             for (const r of regex) {
-                if (!r.includes("...")) {
-                    matches.push(r);
-                }
+                if (!r.includes("...")) matches.push(r);
             }
         }
 
@@ -255,29 +301,30 @@ async function scanNode(node) {
         cleanProcessed();
 
         const detectTime = performance.now();
-        const detectedAt = Date.now();
 
+        // Process detected links
         for (const raw of matches) {
             const cleanLink = raw.trim();
 
             if (!window.__firedLinks) window.__firedLinks = new Map();
 
+            // Prevent duplicate openings
             const lastFire = window.__firedLinks.get(cleanLink);
             if (lastFire && now - lastFire < 1500) continue;
 
             window.__firedLinks.set(cleanLink, now);
 
-            const finalUrl = cleanLink;
+            // Validate link
+            if (!cleanLink.includes("&type=Server")) continue;
+            if (cleanLink.includes("...")) continue;
+            if (!cleanLink.includes("roblox.com/share")) continue;
 
-            if (!finalUrl.includes("&type=Server")) continue;
-            if (finalUrl.includes("...")) continue;
-            if (!finalUrl.includes("roblox.com/share")) continue;
-
+            // Cooldown & Duplicate protection
             if (!settings.bypassCooldown && cooldown) continue;
-            if (!settings.bypassCooldown && processedLinks.has(finalUrl)) continue;
+            if (!settings.bypassCooldown && processedLinks.has(cleanLink)) continue;
 
             if (!settings.bypassCooldown) {
-                processedLinks.set(finalUrl, now);
+                processedLinks.set(cleanLink, now);
             }
 
             let user = "user";
@@ -289,10 +336,7 @@ async function scanNode(node) {
 
             if (messageEl) {
                 const authorEl = messageEl.querySelector("#author-name");
-
-                if (authorEl) {
-                    user = authorEl.innerText || "user";
-                }
+                if (authorEl) user = authorEl.innerText || "user";
             }
 
             const cleanUser = user
@@ -302,9 +346,14 @@ async function scanNode(node) {
 
             const normalizedUser = cleanUser.toLowerCase();
 
-            if (settings.ignoreSameUser && processedUsers.has(normalizedUser)) {
-                continue;
+            // Only allow links posted by the streamer/channel owner
+            if (settings.streamerOnly) {
+                const normalizedStreamer = streamer.replace(/^@+/, "").toLowerCase();
+                if (normalizedUser !== normalizedStreamer) continue;
             }
+
+            // Ignore previously detected users
+            if (settings.ignoreSameUser && processedUsers.has(normalizedUser)) continue;
 
             if (settings.ignoreSameUser) {
                 processedUsers.set(normalizedUser, true);
@@ -315,105 +364,109 @@ async function scanNode(node) {
                 Math.floor(performance.now() - detectTime)
             );
 
-            if (!window.__recentQueue) {
-                window.__recentQueue = Promise.resolve();
-            }
+            // Unique ID per link instance
+            const id = crypto.randomUUID();
 
+            if (!window.__recentQueue) window.__recentQueue = Promise.resolve();
+
+            // Save to recent links
             window.__recentQueue = window.__recentQueue.then(() => {
                 return new Promise((resolve) => {
                     chrome.storage.local.get(["recentLinks"], (data) => {
                         const recentLinks = data.recentLinks || [];
 
                         recentLinks.unshift({
+                            id,
                             streamer,
                             user: "@" + cleanUser,
-                            url: finalUrl,
-                            time: detectedAt
+                            url: cleanLink,
+                            time: Date.now()
                         });
-
-                        if (recentLinks.length > 20) {
-                            recentLinks.length = 20;
-                        }
 
                         chrome.storage.local.set({ recentLinks }, resolve);
                     });
                 });
             });
 
+            // Open detected link
             if (enabled) {
+              setTimeout(() => {
+                openLink(cleanLink, detectTime);
 
-                setTimeout(() => {
+                // Auto copy link
+                if (settings.autoCopy) {
+                    try {
+                        navigator.clipboard.writeText(cleanLink);
+                    } catch {}
+                }
 
-                    openLink(finalUrl, reactionTime);
+                // Play notification sound (default)
+                if (settings.sound) {
+                    try {
+                        const audio = new Audio(
+                            chrome.runtime.getURL(
+                                settings.soundFile ||
+                                    "notifications/Notification1.mp3"
+                            )
+                        );
 
-                    if (settings.autoCopy) {
-                        try {
-                            navigator.clipboard.writeText(finalUrl);
-                        } catch {}
-                    }
+                        audio.volume = 0.6;
 
-                    if (settings.sound) {
-                        try {
-                            openSound.currentTime = 0;
-                            openSound.play();
-                        } catch {}
-                    }
+                        const playPromise = audio.play();
 
-                    if (!settings.bypassCooldown) {
-                        startCooldown();
-                    }
-
-                    chrome.storage.local.get(["stats", "links"], (data) => {
-
-                        const stats = data.stats || {
-                            opened: 0,
-                            detected: 0,
-                            lastHit: 0,
-                            fastestHit: 0
-                        };
-
-                        const links = data.links || [];
-
-                        stats.detected++;
-                        stats.opened++;
-
-                        stats.lastHit = detectedAt;
-
-                        if (
-                            !stats.fastestHit ||
-                            reactionTime < stats.fastestHit
-                        ) {
-                            stats.fastestHit = reactionTime;
+                        if (playPromise !== undefined) {
+                            playPromise.catch((err) => {
+                                console.log("[SNIPER] sound blocked:", err);
+                            });
                         }
+                    } catch (e) {
+                        console.log("[SNIPER] sound error:", e);
+                    }
+                }
 
-                        links.unshift({
-                            streamer,
-                            user: "@" + cleanUser,
-                            url: finalUrl
-                        });
+                if (!settings.bypassCooldown) startCooldown();
 
-                        if (links.length > settings.maxLinks) {
-                            links.pop();
-                        }
+                // Update stats & saved links
+                chrome.storage.local.get(["stats", "links"], (data) => {
+                    const stats = data.stats || {
+                        opened: 0,
+                        detected: 0,
+                        lastHit: 0,
+                        fastestHit: 0
+                    };
 
-                        chrome.storage.local.set({ stats, links });
+                    const links = data.links || [];
 
+                    stats.detected++;
+                    stats.opened++;
+                    stats.lastHit = Date.now();
+
+                    if (!stats.fastestHit || reactionTime < stats.fastestHit) {
+                        stats.fastestHit = reactionTime;
+                    }
+
+                    // Store unique instance
+                    links.unshift({
+                        id,
+                        streamer,
+                        user: "@" + cleanUser,
+                        url: cleanLink
                     });
 
-                    if (settings.autoStop) {
-                        stop();
-                    }
+                    chrome.storage.local.set({ stats, links });
+                });
 
-                }, 150);
+                // Stop after successful hit
+                if (settings.autoStop) stop();
+              }, 150);
             }
         }
-
     } catch (e) {
         console.log("[SNIPER ERROR]", e);
     }
 }
 
-/* STREAMER */
+// Streamer Detection
 function captureStreamer() {
     try {
         let raw = null;
@@ -443,7 +496,7 @@ function captureStreamer() {
     }
 }
 
-/* CHAT */
+// Chat Observer
 function waitForChat() {
 
     const iframe = document.querySelector("iframe#chatframe, iframe[src*='live_chat']");
@@ -459,6 +512,7 @@ function waitForChat() {
 
     captureStreamer();
 
+    // Reset previous observer
     if (observer) observer.disconnect();
 
     observer = new MutationObserver((muts) => {
@@ -480,6 +534,7 @@ function waitForChat() {
                             "yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-membership-item-renderer"
                         );
 
+                // Scan
                 if (messageEl) {
                     scanNode(messageEl);
                 }
@@ -494,7 +549,8 @@ function waitForChat() {
     });
 }
 
-/* START */
+// Controls
+// Start
 function start() {
 
     enabled = true;
@@ -512,7 +568,7 @@ function start() {
     waitForChat();
 }
 
-/* STOP */
+// Stop
 function stop() {
 
     enabled = false;
@@ -528,7 +584,7 @@ function stop() {
     }
 }
 
-/* MESSAGES */
+// Messages
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     if (msg.action === "start") {

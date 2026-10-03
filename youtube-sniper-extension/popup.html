@@ -8,6 +8,7 @@
 
 <div class="container">
 
+    <!-- Settings button -->
     <div id="settingsIcon">
         <svg viewBox="0 0 24 24" fill="none">
             <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
@@ -21,20 +22,44 @@
         </svg>
     </div>
 
-    <div id="recentIcon">
-        <span>&lt;</span>
+    <div class="topRightIcons">
+
+        <div id="recentIcon">
+            <span>&lt;</span>
+        </div>
+
     </div>
 
+    <!-- Main panel -->
     <div id="recentPanel">
-        <h2>Recent links</h2>
-        <div class="subText">(Only the 20 most recent links)</div>
+
+        <!-- Panel title -->
+        <div class="titleRow">
+            <div class="titleInfoWrap" id="panelTitleInfoWrap">
+                <div class="titleInfoIcon">i</div>
+                <div class="titleInfoPopup" id="panelTitleInfoPopup">
+                    Shows the 15 most recently detected links, newest first.
+                </div>
+            </div>
+            <h2 id="panelTitle">Recent links</h2>
+        </div>
+
+        <!-- Panel subtitle -->
+        <div id="panelSubText" class="subText">
+            Last 15 links
+        </div>
+
+        <!-- Recent list -->
         <div id="recentList"></div>
+
     </div>
 
+    <!-- Settings panel -->
     <div id="settingsPanel">
 
         <h2>SETTINGS</h2>
 
+        <!-- Toggle options -->
         <label><input type="checkbox" id="soundSetting"> Notification sound</label>
         <label><input type="checkbox" id="ignoreSameUser"> Ignore links by same user</label>
         <label><input type="checkbox" id="autoStop"> Auto stop after hit</label>
@@ -42,8 +67,10 @@
         <label><input type="checkbox" id="bypassCooldown"> Bypass cooldown</label>
         <label><input type="checkbox" id="streamerOnly"> Allow links only from streamer</label>
 
+        <!-- Sound selection -->
         <div class="settingBlock">
             <div class="settingTitle">Sound type</div>
+
             <select id="soundSelect">
                 <option value="notifications/Notification1.mp3">Notification 1</option>
                 <option value="notifications/Notification2.mp3">Notification 2</option>
@@ -51,10 +78,20 @@
             </select>
         </div>
 
-        <button id="resetLinksBtn" class="settingsBtn danger">Reset past links</button>
-        <button id="resetRecentLinksBtn" class="settingsBtn danger">Reset recent links</button>
-        <button id="resetStatsBtn" class="settingsBtn danger">Reset stats</button>
+        <!-- Reset -->
+        <button id="resetLinksBtn" class="settingsBtn danger">
+            Reset past links
+        </button>
 
+        <button id="resetRecentLinksBtn" class="settingsBtn danger">
+            Reset recent links
+        </button>
+
+        <button id="resetStatsBtn" class="settingsBtn danger">
+            Reset stats
+        </button>
+
+        <!-- Stats -->
         <h2 class="statsTitle">STATS</h2>
 
         <div class="stat">
@@ -79,42 +116,64 @@
 
         <div class="contactBlock">
             <a class="contactBtn" href="https://discord.gg/MQvK88MRKU" target="_blank">
-                Contact Me Here
+               Contact Me Here
             </a>
 
             <a class="contactBtn" href="https://discord.gg/KD3WAFAbu4" target="_blank">
-                Rivals Charms Hub
+               Rivals Charms Hub
             </a>
 
             <a class="contactBtn highlight" href="https://discord.gg/9YDVbgQw3Y" target="_blank">
-                Rivals Charm Informer
+               Rivals Charm Informer
             </a>
         </div>
 
     </div>
 
+    <!-- Title -->
     <h1>Live Chat PS Link Sniper</h1>
 
+    <!-- Status indicator -->
     <div id="status">OFF</div>
 
+    <!-- Main toggle button -->
     <button id="toggle" class="off">Start</button>
-
+    
     <div id="cooldownText" class="cooldownHidden"></div>
 
-    <h2>Past links:</h2>
-    <div class="subText">(Only the last 10 links)</div>
+    <div class="titleRow">
+        <div class="titleInfoWrap">
+            <div class="titleInfoIcon">i</div>
+            <div class="titleInfoPopup">
+                The 20 most recent links that were opened.
+            </div>
+        </div>
+        <h2>Past links:</h2>
+    </div>
+    <div class="subText">Last 20 links</div>
 
     <div id="linkList"></div>
 
+    <!-- Credits -->
     <div class="footer">
-        Made by <a href="https://www.youtube.com/@spawnorix" target="_blank">@spawnorix</a><br>
-        <a href="https://github.com/Spawnorix/YouTube" target="_blank">v1.2</a>
+        Made by
+        <a href="https://www.youtube.com/@spawnorix" target="_blank">
+            @spawnorix
+        </a>
+        <br>
+
+        <a href="https://github.com/johncock120-wq/YouTube" target="_blank">
+            v1.6.3
+        </a>
     </div>
 
+    <!-- Info -->
     <div id="infoWrap">
+
         <div id="infoIcon">i</div>
 
         <div id="infoPopup">
+
             <div class="infoTitle">Standard Version</div>
 
             <div class="infoDivider"></div>
@@ -122,11 +181,32 @@
             <div class="infoDesc">
                 Basic edition of the sniper extension featuring core link detection, automatic opening, recent link tracking, cooldown protection, and statistics monitoring.
             </div>
+
         </div>
+
     </div>
 
 </div>
 
-<script src="popup.js"></script>
+<!-- Key system -->
+<div id="keyOverlay">
+
+    <div class="keyBox">
+
+        <h2>Enter Key</h2>
+
+        <input id="keyInput" type="password" placeholder="Key..." />
+
+        <button id="keySubmit">Confirm</button>
+
+        <div id="keyError"></div>
+
+    </div>
+
+</div>
+
+<!-- Main -->
+<script type="module" src="popup.js"></script>
+
 </body>
 </html>
